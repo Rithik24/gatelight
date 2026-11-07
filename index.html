@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gatelight Camera</title>
+<meta name="description" content="A film-look camera: shoot or pick a photo and develop it through film stocks with halation, grain and tone curves.">
+<meta name="theme-color" content="#0f0d0c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen camera — readout bar, viewfinder, film-stock strip, one adjust slider, shutter bar. Single dark look on purpose (darkroom). */
+:root{
+  color-scheme: dark;
+  --bg:#0f0d0c; --panel:#1a1614; --line:#2e2724; --fg:#efe6db; --muted:#968a7f;
+  --amber:#e6a85a; --amber-ink:#1a1209;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--display);overflow:hidden;-webkit-tap-highlight-color:transparent}
+.app{height:100%;max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:10px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-top:calc(10px + env(safe-area-inset-top, 0px));padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px))}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mark{font-weight:700;font-size:20px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.mark i{width:10px;height:10px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber);display:inline-block}
+.readout{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.readout b{color:var(--fg);font-weight:600}
+button,.btn{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,.btn:focus-within,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.aspect{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:4px 8px;color:var(--fg);letter-spacing:.06em}
+.stage{position:relative;flex:1 1 auto;min-height:180px;background:#000;border-radius:6px;overflow:hidden;touch-action:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.tag{position:absolute;left:10px;top:10px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:rgba(15,13,12,.72);color:var(--fg);padding:5px 8px;border-radius:3px}
+.tag.dim{top:auto;bottom:10px;color:var(--amber)}
+.busy{position:absolute;inset:0;display:grid;place-items:center;background:rgba(15,13,12,.55);font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.stocks{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.stocks::-webkit-scrollbar{display:none}
+.stock{flex:0 0 auto;text-align:left;border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:112px;background:var(--panel)}
+.stock .n{font-weight:700;font-size:14px;display:block}
+.stock .d{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.04em}
+.stock[aria-pressed="true"]{border-color:var(--amber);background:var(--amber);color:var(--amber-ink)}
+.stock[aria-pressed="true"] .d{color:var(--amber-ink);opacity:.75}
+.adjust{display:flex;flex-direction:column;gap:8px}
+.params{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.params::-webkit-scrollbar{display:none}
+.param{flex:1 0 auto;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-radius:4px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.param span{font-size:12px;color:var(--fg);font-variant-numeric:tabular-nums}
+.param[aria-pressed="true"]{background:var(--panel);color:var(--amber)}
+input[type=range]{width:100%;accent-color:var(--amber);height:28px;margin:0}
+.bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
+.side{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:10px 12px;border:1px solid var(--line);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;gap:6px;position:relative}
+.side input,.shutter input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.bar .left{justify-self:start}.bar .right{justify-self:end}
+.side.save{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
+.shutter{position:relative;width:72px;height:72px;border-radius:50%;border:3px solid var(--fg);display:grid;place-items:center}
+.shutter::after{content:"";width:56px;height:56px;border-radius:50%;background:var(--amber);transition:transform .12s}
+.shutter:active::after{transform:scale(.9)}
+.compare{position:absolute;right:10px;bottom:10px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:rgba(15,13,12,.72);padding:7px 10px;border-radius:3px;user-select:none;-webkit-user-select:none}
+.toast{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:4px;z-index:30;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion: reduce){.shutter::after{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="mark"><i></i>Gatelight</div>
+    <div class="readout">
+      <span id="ro-stock"><b>Tungsten 500</b></span>
+      <span id="ro-ev">±0.0 EV</span>
+      <button class="aspect" id="aspect" aria-label="Change frame shape">3:2</button>
+    </div>
+  </header>
+  <div class="stage" id="stage">
+    <canvas id="view" aria-label="Developed photo"></canvas>
+    <div class="tag" id="srcTag">Sample scene · tap the shutter to shoot</div>
+    <div class="tag dim" id="dimTag"></div>
+    <div class="compare" id="compare">Hold: original</div>
+    <div class="busy" id="busy" hidden>Developing…</div>
+  </div>
+  <div class="stocks" id="stocks" role="group" aria-label="Film stock"></div>
+  <div class="adjust">
+    <div class="params" id="params" role="group" aria-label="Adjustment"></div>
+    <input type="range" id="slider" aria-label="Adjustment amount">
+  </div>
+  <div class="bar">
+    <label class="side left btn">Gallery<input type="file" id="pick" accept="image/*"></label>
+    <label class="shutter btn" aria-label="Take a photo"><input type="file" id="cam" accept="image/*" capture="environment"></label>
+    <button class="side save right" id="save">Save</button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="film.js"></script>
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const { STOCKS, ASPECTS } = Film;
+const state = { stock:0, strength:100, grain:STOCKS[0].grain, halo:STOCKS[0].halo, warmth:0, ev:0, aspect:0 };
+const PARAMS = [
+  { k:"strength", label:"Strength", min:0, max:100, step:1, fmt:v=>v+"%" },
+  { k:"grain", label:"Grain", min:0, max:100, step:1, fmt:v=>String(v) },
+  { k:"halo", label:"Halation", min:0, max:100, step:1, fmt:v=>String(v) },
+  { k:"warmth", label:"Warmth", min:-50, max:50, step:1, fmt:v=>(v>0?"+":"")+v },
+  { k:"ev", label:"Exposure", min:-2, max:2, step:0.1, fmt:v=>(v>0?"+":v<0?"−":"±")+Math.abs(v).toFixed(1) },
+];
+let activeParam = 0;
+
+/* remember the last stock and settings on this phone */
+try { const saved = JSON.parse(localStorage.getItem("gatelight") || "null"); if (saved) Object.assign(state, saved); } catch(_){}
+const remember = () => { try { localStorage.setItem("gatelight", JSON.stringify(state)); } catch(_){} };
+
+const view=$("#view"), vx=view.getContext("2d");
+let src=Film.sampleScene(), srcName="sample", P=null, developed=null, raf=0;
+
+function previewEdge(){ const r=$("#stage").getBoundingClientRect(); return Math.min(1600, Math.max(900, Math.round(Math.max(r.width,r.height)*(window.devicePixelRatio||1)))); }
+function rebuild(){ P=Film.prepare(src, previewEdge(), state.aspect); view.width=P.w; view.height=P.h; $("#dimTag").textContent=ASPECTS[state.aspect][0]+" · "+(src.naturalWidth||src.width)+"×"+(src.naturalHeight||src.height); schedule(); }
+function schedule(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(()=>{ developed=Film.develop(P,state); vx.putImageData(developed,0,0); }); remember(); }
+
+function renderStocks(){
+  const box=$("#stocks"); box.innerHTML="";
+  STOCKS.forEach((s,i)=>{
+    const b=document.createElement("button"); b.className="stock"; b.id="stock-"+i;
+    b.setAttribute("aria-pressed", String(i===state.stock));
+    b.innerHTML='<span class="n"></span><span class="d"></span>';
+    b.querySelector(".n").textContent=s.name; b.querySelector(".d").textContent=s.d;
+    b.onclick=()=>{ state.stock=i; state.grain=s.grain; state.halo=s.halo; renderStocks(); renderParams(); schedule(); };
+    box.appendChild(b);
+  });
+  $("#ro-stock b").textContent=STOCKS[state.stock].name;
+}
+function renderParams(){
+  const box=$("#params"); box.innerHTML="";
+  PARAMS.forEach((p,i)=>{
+    const b=document.createElement("button"); b.className="param"; b.id="param-"+p.k;
+    b.setAttribute("aria-pressed", String(i===activeParam));
+    b.innerHTML=p.label+"<span>"+p.fmt(state[p.k])+"</span>";
+    b.onclick=()=>{ activeParam=i; renderParams(); };
+    box.appendChild(b);
+  });
+  const p=PARAMS[activeParam], sl=$("#slider");
+  sl.min=p.min; sl.max=p.max; sl.step=p.step; sl.value=state[p.k]; sl.setAttribute("aria-label",p.label);
+  $("#ro-ev").textContent=PARAMS[4].fmt(state.ev)+" EV";
+}
+$("#slider").addEventListener("input", e=>{
+  const p=PARAMS[activeParam]; state[p.k]=parseFloat(e.target.value);
+  document.querySelector("#param-"+p.k+" span").textContent=p.fmt(state[p.k]);
+  $("#ro-ev").textContent=PARAMS[4].fmt(state.ev)+" EV";
+  schedule();
+});
+$("#slider").addEventListener("dblclick", ()=>{ const p=PARAMS[activeParam]; const def={strength:100,warmth:0,ev:0,grain:STOCKS[state.stock].grain,halo:STOCKS[state.stock].halo}[p.k]; state[p.k]=def; renderParams(); schedule(); });
+$("#aspect").textContent=ASPECTS[state.aspect][0];
+$("#aspect").onclick=()=>{ state.aspect=(state.aspect+1)%ASPECTS.length; $("#aspect").textContent=ASPECTS[state.aspect][0]; rebuild(); };
+
+const cmp=$("#compare");
+const showOrig=e=>{ e.preventDefault(); if(P) vx.putImageData(P.data,0,0); cmp.textContent="Original"; };
+const showDev=()=>{ if(developed) vx.putImageData(developed,0,0); cmp.textContent="Hold: original"; };
+cmp.addEventListener("pointerdown",showOrig); ["pointerup","pointerleave","pointercancel"].forEach(t=>cmp.addEventListener(t,showDev));
+
+function loadFile(file){
+  if(!file) return;
+  const url=URL.createObjectURL(file), img=new Image();
+  $("#busy").hidden=false;
+  img.onload=()=>{ src=img; srcName=(file.name||"photo").replace(/\.[^.]+$/,""); $("#srcTag").textContent="Your photo"; rebuild(); $("#busy").hidden=true; };
+  img.onerror=()=>{ $("#busy").hidden=true; toast("That file isn't a photo Chrome can open. Try a JPEG."); };
+  img.src=url;
+}
+$("#cam").addEventListener("change",e=>{ loadFile(e.target.files[0]); e.target.value=""; });
+$("#pick").addEventListener("change",e=>{ loadFile(e.target.files[0]); e.target.value=""; });
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,3000); }
+
+/* Full-size develop. A Pixel 8 photo is 4080×3072; keep it full size. */
+$("#save").onclick=async()=>{
+  $("#busy").hidden=false;
+  await new Promise(r=>setTimeout(r,30));
+  let blob;
+  try{
+    const F=Film.prepare(src,4096,state.aspect); F.x.putImageData(Film.develop(F,state),0,0);
+    blob=await new Promise(r=>F.c.toBlob(r,"image/jpeg",0.93));
+  } catch(e){ blob=null; }
+  $("#busy").hidden=true;
+  if(!blob){ toast("Couldn't develop the full-size photo. Close other apps and try again."); return; }
+  const stamp=new Date().toISOString().slice(0,19).replace(/[-:T]/g,"");
+  const filename="Gatelight_"+STOCKS[state.stock].name.replace(/\s+/g,"")+"_"+stamp+".jpg";
+  // Saved to the phone's Download folder; Google Photos shows it under Library › Download.
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
+  toast("Saved to Downloads · "+filename);
+};
+
+let rt; window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(rebuild,200); });
+renderStocks(); renderParams(); rebuild();
+
+if ("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+})();
+</script>
+</body>
+</html>

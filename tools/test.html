@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Gatelight test bench</title>
+<style>
+body{background:#111;color:#ddd;font:12px ui-monospace,Consolas,monospace;margin:12px}
+.row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px}
+figure{margin:0}figcaption{padding:3px 0}
+canvas{width:100%;display:block}
+h2{font-size:13px;margin:18px 0 6px;color:#e6a85a}
+</style></head><body>
+<div id="out"></div>
+<script src="../film.js"></script>
+<script>
+const photos = (new URLSearchParams(location.search).get("p") || "Wallpaper/ThemeA/img20.jpg").split(",");
+const out = document.getElementById("out");
+function load(u){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=u; }); }
+(async()=>{
+  for (const p of photos){
+    const img = await load(p.startsWith("/") ? p : "/samples/"+p);
+    const P = Film.prepare(img, 900, 4);
+    const h=document.createElement("h2"); h.textContent=p+"  "+img.naturalWidth+"×"+img.naturalHeight; out.appendChild(h);
+    const row=document.createElement("div"); row.className="row"; out.appendChild(row);
+    const add=(label,data)=>{ const f=document.createElement("figure"); const c=document.createElement("canvas"); c.width=P.w; c.height=P.h; c.getContext("2d").putImageData(data,0,0); const cap=document.createElement("figcaption"); cap.textContent=label; f.append(c,cap); row.appendChild(f); };
+    add("Original", P.data);
+    Film.STOCKS.forEach((s,i)=>{ const t=performance.now(); const d=Film.develop(P,{stock:i,strength:100,grain:s.grain,halo:s.halo,warmth:0,ev:0}); add(s.name+"  ("+Math.round(performance.now()-t)+" ms)", d); });
+  }
+  document.title="done";
+})();
+</script></body></html>
